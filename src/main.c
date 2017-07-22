@@ -55,64 +55,12 @@
 #define TRUE 1
 #define FALSE 0
 
-int colon = 0;
+void init_output_pins(GPIO_InitTypeDef GPIO_Init);
+void init_input_pins(GPIO_InitTypeDef GPIO_Init);
+void write_digit(int digit);
 
-void init_output_pins(GPIO_InitTypeDef GPIO_Init)
-{
-  GPIO_Init.Pin = SEG_A_L1 | SEG_B_L2 | SEG_C_L3 | SEG_D | SEG_E | SEG_F | SEG_G | SEG_DP |
-      CC_1 | CC_2 | CC_3 | CC_4 | CC_L;
-  GPIO_Init.Speed = GPIO_SPEED_MEDIUM;
-  GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_Init.Pull = GPIO_PULLUP;
-  GPIO_Init.Alternate = 0;
-  HAL_GPIO_Init(GPIOE, &GPIO_Init);
-}
-
-void init_input_pins(GPIO_InitTypeDef GPIO_Init)
-{
-  GPIO_Init.Pin = BUTTON;
-  GPIO_Init.Speed = GPIO_SPEED_MEDIUM;
-  GPIO_Init.Mode = GPIO_MODE_INPUT;
-  GPIO_Init.Pull = GPIO_PULLDOWN;
-  GPIO_Init.Alternate = 0;
-  HAL_GPIO_Init(GPIOA, &GPIO_Init);
-}
-
-void write_digit(int digit)
-{
-  if (digit==CC_2 || digit==CC_3 || digit==CC_4 || (colon && digit==CC_L))
-    HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
-  if (digit==CC_1 || digit==CC_2 || digit==CC_3 || digit==CC_4 || (colon && digit==CC_L))
-    HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_RESET);
-  if (digit==CC_1 || digit==CC_3 || digit==CC_4)
-    HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_RESET);
-  if (digit==CC_2 || digit==CC_3 || digit==CC_4)
-    HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_RESET);
-  if (digit==CC_2 || digit==CC_3 || digit==CC_4)
-    HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_RESET);
-  if (digit==CC_3 || digit==CC_4)
-    HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_RESET);
-  if (digit==CC_2)
-    HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_RESET);
-  if (FALSE)
-    HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_SET);
-  else
-    HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_RESET);
-}
+int hours = 0;
+int mins = 0;
 
 int main(int argc, char* argv[])
 {
@@ -204,12 +152,65 @@ int main(int argc, char* argv[])
     debounce_time_elapsed = (__HAL_TIM_GET_FLAG(&s_TimerInstance2, TIM_FLAG_UPDATE) != RESET);
 
     if (button_state && !last_button_state && debounce_time_elapsed) {
-      colon = 1 - colon;
+      // TODO: Increment time
       __HAL_TIM_CLEAR_FLAG(&s_TimerInstance2, TIM_IT_UPDATE);
     }
 
     last_button_state = button_state;
 
+  }
+}
+
+void init_output_pins(GPIO_InitTypeDef GPIO_Init)
+{
+  GPIO_Init.Pin = SEG_A_L1 | SEG_B_L2 | SEG_C_L3 | SEG_D | SEG_E | SEG_F | SEG_G | SEG_DP |
+      CC_1 | CC_2 | CC_3 | CC_4 | CC_L;
+  GPIO_Init.Speed = GPIO_SPEED_MEDIUM;
+  GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_Init.Pull = GPIO_PULLUP;
+  GPIO_Init.Alternate = 0;
+  HAL_GPIO_Init(GPIOE, &GPIO_Init);
+}
+
+void init_input_pins(GPIO_InitTypeDef GPIO_Init)
+{
+  GPIO_Init.Pin = BUTTON;
+  GPIO_Init.Speed = GPIO_SPEED_MEDIUM;
+  GPIO_Init.Mode = GPIO_MODE_INPUT;
+  GPIO_Init.Pull = GPIO_PULLDOWN;
+  GPIO_Init.Alternate = 0;
+  HAL_GPIO_Init(GPIOA, &GPIO_Init);
+}
+
+void write_digit(int digit)
+{
+  // TODO for Tristan
+  // digit will be one of CC_1, CC_2, CC_3, CC_4, or CC_L, which are defined constants
+  // turn on the appropriate segments depending on which digit this is
+  // CC_1 and CC_2 will depend on the hours variable
+  // CC_3 and CC_4 will depend on the mins variable
+  // CC_L should always display the colon but leave L3 off for now
+
+  // The example code below lights up all segments for the 1st and 3rd digit,
+  // and turns everything else off
+  if (digit == CC_1 || digit == CC_3) {
+    HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_SET);
+  } else {
+    HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_RESET);
   }
 }
 
