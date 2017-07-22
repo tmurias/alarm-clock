@@ -48,10 +48,14 @@
 #define CC_4 GPIO_PIN_8
 #define CC_L GPIO_PIN_2
 
+#define BUTTON GPIO_PIN_0
+
 #define ON 1
 #define OFF 0
 #define TRUE 1
 #define FALSE 0
+
+int colon = 0;
 
 void init_output_pins(GPIO_InitTypeDef GPIO_Init)
 {
@@ -64,13 +68,23 @@ void init_output_pins(GPIO_InitTypeDef GPIO_Init)
   HAL_GPIO_Init(GPIOE, &GPIO_Init);
 }
 
+void init_input_pins(GPIO_InitTypeDef GPIO_Init)
+{
+  GPIO_Init.Pin = BUTTON;
+  GPIO_Init.Speed = GPIO_SPEED_MEDIUM;
+  GPIO_Init.Mode = GPIO_MODE_INPUT;
+  GPIO_Init.Pull = GPIO_PULLDOWN;
+  GPIO_Init.Alternate = 0;
+  HAL_GPIO_Init(GPIOA, &GPIO_Init);
+}
+
 void write_digit(int digit)
 {
-  if (digit==CC_2 || digit==CC_3 || digit==CC_4 || digit==CC_L)
+  if (digit==CC_2 || digit==CC_3 || digit==CC_4 || (colon && digit==CC_L))
     HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_SET);
   else
     HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
-  if (digit==CC_1 || digit==CC_2 || digit==CC_3 || digit==CC_4 || digit==CC_L)
+  if (digit==CC_1 || digit==CC_2 || digit==CC_3 || digit==CC_4 || (colon && digit==CC_L))
     HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_SET);
   else
     HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_RESET);
@@ -108,11 +122,15 @@ int main(int argc, char* argv[])
   __HAL_RCC_GPIOE_CLK_ENABLE(); // output pins
 
   __HAL_RCC_TIM3_CLK_ENABLE();// enable clock for Timer 3
+  __HAL_RCC_TIM6_CLK_ENABLE();// enable clock for Timer 6
 
   GPIO_InitTypeDef GPIO_Init;
 
   // Initialize output pins for the display
   init_output_pins(GPIO_Init);
+
+  // Initialize input pins for buttons
+  init_input_pins(GPIO_Init);
 
   // Set up timer 3 for limiting 7-segment frequency
   TIM_HandleTypeDef s_TimerInstance1;
@@ -124,6 +142,17 @@ int main(int argc, char* argv[])
   s_TimerInstance1.Init.RepetitionCounter = 0;
   HAL_TIM_Base_Init(&s_TimerInstance1);
   HAL_TIM_Base_Start(&s_TimerInstance1);
+
+  // Set up timer 6 for button debouncing
+  TIM_HandleTypeDef s_TimerInstance2;
+  s_TimerInstance2.Instance = TIM6;
+  s_TimerInstance2.Init.Prescaler = 8399;
+  s_TimerInstance2.Init.Period = 5000;
+  s_TimerInstance2.Init.CounterMode = TIM_COUNTERMODE_DOWN;
+  s_TimerInstance2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  s_TimerInstance2.Init.RepetitionCounter = 0;
+  HAL_TIM_Base_Init(&s_TimerInstance2);
+  HAL_TIM_Base_Start(&s_TimerInstance2);
 
   HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_RESET);
@@ -139,31 +168,47 @@ int main(int argc, char* argv[])
   HAL_GPIO_WritePin(GPIOE, CC_4, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOE, CC_L, GPIO_PIN_SET);
 
+  int button_state;
+  int last_button_state = OFF; // Flag for edge detection when button is pressed
+  int debounce_time_elapsed = TRUE; //Whether sufficient time has passed to press the button again
+
   int digits[] = { CC_1, CC_2, CC_3, CC_4, CC_L };
   int num_digits = sizeof(digits) / sizeof(digits[0]);
   int digit = 0;
 
   while (TRUE) {
-    if (__HAL_TIM_GET_FLAG(&s_TimerInstance1, TIM_FLAG_UPDATE) == RESET) {
-      // Continue looping until we reach the timer's period
-      continue;
-    }
-    __HAL_TIM_CLEAR_FLAG(&s_TimerInstance1, TIM_IT_UPDATE); // Reset the timer
 
-    for (int i = 0; i < num_digits; i++) {
-      if (i == digit) {
-        HAL_GPIO_WritePin(GPIOE, digits[i], GPIO_PIN_RESET);
+    // Limits frequency for updating the 7-segment display
+    if (__HAL_TIM_GET_FLAG(&s_TimerInstance1, TIM_FLAG_UPDATE) != RESET) {
+      __HAL_TIM_CLEAR_FLAG(&s_TimerInstance1, TIM_IT_UPDATE); // Reset the timer
+
+      for (int i = 0; i < num_digits; i++) {
+        if (i == digit) {
+          HAL_GPIO_WritePin(GPIOE, digits[i], GPIO_PIN_RESET);
+        } else {
+           HAL_GPIO_WritePin(GPIOE, digits[i], GPIO_PIN_SET);
+        }
+      }
+      write_digit(digits[digit]);
+
+      if (digit == num_digits-1) {
+        digit = 0;
       } else {
-         HAL_GPIO_WritePin(GPIOE, digits[i], GPIO_PIN_SET);
+        digit++;
       }
     }
-    write_digit(digits[digit]);
 
-    if (digit == num_digits-1) {
-      digit = 0;
-    } else {
-      digit++;
+    button_state = HAL_GPIO_ReadPin(GPIOA, BUTTON);
+
+    // Flag is set when the timer reaches its period
+    debounce_time_elapsed = (__HAL_TIM_GET_FLAG(&s_TimerInstance2, TIM_FLAG_UPDATE) != RESET);
+
+    if (button_state && !last_button_state && debounce_time_elapsed) {
+      colon = 1 - colon;
+      __HAL_TIM_CLEAR_FLAG(&s_TimerInstance2, TIM_IT_UPDATE);
     }
+
+    last_button_state = button_state;
 
   }
 }
