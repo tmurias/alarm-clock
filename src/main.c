@@ -55,12 +55,34 @@
 #define TRUE 1
 #define FALSE 0
 
+#define DIGIT_0 0b11111100
+#define DIGIT_1 0b01100000
+#define DIGIT_2 0b11011010
+#define DIGIT_3 0b11110010
+#define DIGIT_4 0b01100110
+#define DIGIT_5 0b10110110
+#define DIGIT_6 0b10111110
+#define DIGIT_7 0b11100000
+#define DIGIT_8 0b11111110
+#define DIGIT_9 0b11100110
+
+#define COLON 0b11000000
+
+const int digit_values[10] = {
+    DIGIT_0, DIGIT_1,
+    DIGIT_2, DIGIT_3,
+    DIGIT_4, DIGIT_5,
+    DIGIT_6, DIGIT_7,
+    DIGIT_8, DIGIT_9
+};
+
 void init_output_pins(GPIO_InitTypeDef GPIO_Init);
 void init_input_pins(GPIO_InitTypeDef GPIO_Init);
 void write_digit(int digit);
+void write_digit_value(int value);
 
-int hours = 0;
-int mins = 0;
+int hours = 12;
+int mins = 5;
 
 int main(int argc, char* argv[])
 {
@@ -182,36 +204,67 @@ void init_input_pins(GPIO_InitTypeDef GPIO_Init)
   HAL_GPIO_Init(GPIOA, &GPIO_Init);
 }
 
+/**
+ * Lights up all required segments for the given digit based
+ * on the values of the global hours and mins variables.
+ */
 void write_digit(int digit)
 {
-  // TODO for Tristan
-  // digit will be one of CC_1, CC_2, CC_3, CC_4, or CC_L, which are defined constants
-  // turn on the appropriate segments depending on which digit this is
-  // CC_1 and CC_2 will depend on the hours variable
-  // CC_3 and CC_4 will depend on the mins variable
-  // CC_L should always display the colon but leave L3 off for now
+  int digit1 = hours / 10;
+  int digit1_value = digit_values[digit1];
+  int digit2 = hours % 10;
+  int digit2_value = digit_values[digit2];
+  int digit3 = mins / 10;
+  int digit3_value = digit_values[digit3];
+  int digit4 = mins % 10;
+  int digit4_value = digit_values[digit4];
 
-  // The example code below lights up all segments for the 1st and 3rd digit,
-  // and turns everything else off
-  if (digit == CC_1 || digit == CC_3) {
-    HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_SET);
-  } else {
-    HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_RESET);
+  if (digit == CC_1) {
+    write_digit_value(digit_values[hours / 10]);
+  } else if (digit == CC_2) {
+    write_digit_value(digit_values[hours % 10]);
+  } else if (digit == CC_3) {
+    write_digit_value(digit_values[mins / 10]);
+  } else if (digit == CC_4) {
+    write_digit_value(digit_values[mins % 10]);
+  } else if (digit == CC_L) {
+    write_digit_value(COLON);
   }
+}
+
+//void write_digit(int digit)
+//{
+//  HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
+//  HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_SET);
+//  HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_RESET);
+//  HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_RESET);
+//  HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_RESET);
+//  HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_RESET);
+//  HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_RESET);
+//  HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_RESET);
+//}
+
+/**
+ * Writes the given value to whatever digit is currently selected.
+ */
+void write_digit_value(int value)
+{
+  int a = value & 0b10000000;
+  int b = value & 0b01000000;
+  int c = value & 0b00100000;
+  int d = value & 0b00010000;
+  int e = value & 0b00001000;
+  int f = value & 0b10000100;
+  int g = value & 0b10000000;
+  int dp = value & 0b10000000;
+  HAL_GPIO_WritePin(GPIOE, SEG_A_L1, (value & 0b10000000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SEG_B_L2, (value & 0b01000000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SEG_C_L3, (value & 0b00100000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SEG_D, (value & 0b00010000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SEG_E, (value & 0b00001000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SEG_F, (value & 0b00000100) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SEG_G, (value & 0b00000010) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SEG_DP, (value & 0b00000001) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 #pragma GCC diagnostic pop
