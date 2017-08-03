@@ -49,6 +49,13 @@
 #define CC_L GPIO_PIN_2
 
 #define BUTTON GPIO_PIN_0
+#define BTN_HOURS GPIO_PIN_3
+#define BTN_MINS GPIO_PIN_5
+#define BTN_ALARMOFF GPIO_PIN_7
+#define BTN_TIMESET GPIO_PIN_0
+#define BTN_24HR GPIO_PIN_2
+#define BTN_WHATEVER GPIO_PIN_4
+#define BTN_SNOOZE GPIO_PIN_6
 
 #define ON 1
 #define OFF 0
@@ -80,9 +87,13 @@ void init_output_pins(GPIO_InitTypeDef GPIO_Init);
 void init_input_pins(GPIO_InitTypeDef GPIO_Init);
 void write_digit(int digit);
 void write_digit_value(int value);
+void increment_hours();
+void increment_mins();
+void increment_secs();
 
-int hours = 12;
-int mins = 5;
+int hours = 2;
+int mins = 41;
+int secs = 0;
 
 int main(int argc, char* argv[])
 {
@@ -93,6 +104,7 @@ int main(int argc, char* argv[])
 
   __HAL_RCC_TIM3_CLK_ENABLE();// enable clock for Timer 3
   __HAL_RCC_TIM6_CLK_ENABLE();// enable clock for Timer 6
+  __HAL_RCC_TIM4_CLK_ENABLE();// enable clock for Timer 4
 
   GPIO_InitTypeDef GPIO_Init;
 
@@ -123,6 +135,17 @@ int main(int argc, char* argv[])
   s_TimerInstance2.Init.RepetitionCounter = 0;
   HAL_TIM_Base_Init(&s_TimerInstance2);
   HAL_TIM_Base_Start(&s_TimerInstance2);
+
+  // Set up timer 4 for counting minutes
+  TIM_HandleTypeDef s_TimerInstance3;
+  s_TimerInstance3.Instance = TIM4;
+  s_TimerInstance3.Init.Prescaler = 16799;
+  s_TimerInstance3.Init.Period = 4999;
+  s_TimerInstance3.Init.CounterMode = TIM_COUNTERMODE_DOWN;
+  s_TimerInstance3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  s_TimerInstance3.Init.RepetitionCounter = 0;
+  HAL_TIM_Base_Init(&s_TimerInstance3);
+  HAL_TIM_Base_Start(&s_TimerInstance3);
 
   HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_RESET);
@@ -170,15 +193,20 @@ int main(int argc, char* argv[])
 
     button_state = HAL_GPIO_ReadPin(GPIOA, BUTTON);
 
-    // Flag is set when the timer reaches its period
+    // Flag is set when the debounce timer reaches its period
     debounce_time_elapsed = (__HAL_TIM_GET_FLAG(&s_TimerInstance2, TIM_FLAG_UPDATE) != RESET);
 
     if (button_state && !last_button_state && debounce_time_elapsed) {
-      // TODO: Increment time
+      //increment_mins();
       __HAL_TIM_CLEAR_FLAG(&s_TimerInstance2, TIM_IT_UPDATE);
     }
-
     last_button_state = button_state;
+
+    // Flag is set when a minute is reached (increment the clock)
+    if (__HAL_TIM_GET_FLAG(&s_TimerInstance3, TIM_FLAG_UPDATE) != RESET) {
+      increment_secs();
+      __HAL_TIM_CLEAR_FLAG(&s_TimerInstance3, TIM_IT_UPDATE);
+    }
 
   }
 }
@@ -210,15 +238,6 @@ void init_input_pins(GPIO_InitTypeDef GPIO_Init)
  */
 void write_digit(int digit)
 {
-  int digit1 = hours / 10;
-  int digit1_value = digit_values[digit1];
-  int digit2 = hours % 10;
-  int digit2_value = digit_values[digit2];
-  int digit3 = mins / 10;
-  int digit3_value = digit_values[digit3];
-  int digit4 = mins % 10;
-  int digit4_value = digit_values[digit4];
-
   if (digit == CC_1) {
     write_digit_value(digit_values[hours / 10]);
   } else if (digit == CC_2) {
@@ -232,31 +251,11 @@ void write_digit(int digit)
   }
 }
 
-//void write_digit(int digit)
-//{
-//  HAL_GPIO_WritePin(GPIOE, SEG_A_L1, GPIO_PIN_RESET);
-//  HAL_GPIO_WritePin(GPIOE, SEG_B_L2, GPIO_PIN_SET);
-//  HAL_GPIO_WritePin(GPIOE, SEG_C_L3, GPIO_PIN_RESET);
-//  HAL_GPIO_WritePin(GPIOE, SEG_D, GPIO_PIN_RESET);
-//  HAL_GPIO_WritePin(GPIOE, SEG_E, GPIO_PIN_RESET);
-//  HAL_GPIO_WritePin(GPIOE, SEG_F, GPIO_PIN_RESET);
-//  HAL_GPIO_WritePin(GPIOE, SEG_G, GPIO_PIN_RESET);
-//  HAL_GPIO_WritePin(GPIOE, SEG_DP, GPIO_PIN_RESET);
-//}
-
 /**
  * Writes the given value to whatever digit is currently selected.
  */
 void write_digit_value(int value)
 {
-  int a = value & 0b10000000;
-  int b = value & 0b01000000;
-  int c = value & 0b00100000;
-  int d = value & 0b00010000;
-  int e = value & 0b00001000;
-  int f = value & 0b10000100;
-  int g = value & 0b10000000;
-  int dp = value & 0b10000000;
   HAL_GPIO_WritePin(GPIOE, SEG_A_L1, (value & 0b10000000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOE, SEG_B_L2, (value & 0b01000000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOE, SEG_C_L3, (value & 0b00100000) ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -265,6 +264,32 @@ void write_digit_value(int value)
   HAL_GPIO_WritePin(GPIOE, SEG_F, (value & 0b00000100) ? GPIO_PIN_SET : GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOE, SEG_G, (value & 0b00000010) ? GPIO_PIN_SET : GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOE, SEG_DP, (value & 0b00000001) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+void increment_hours()
+{
+  hours++;
+  if (hours > 12) {
+    hours = 1;
+  }
+}
+
+void increment_mins()
+{
+  mins++;
+  if (mins > 59) {
+    mins = 0;
+    increment_hours();
+  }
+}
+
+void increment_secs()
+{
+  secs++;
+  if (secs > 59) {
+    secs = 0;
+    increment_mins();
+  }
 }
 
 #pragma GCC diagnostic pop
