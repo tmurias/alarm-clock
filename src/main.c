@@ -52,7 +52,7 @@
 #define BTN_HOURS GPIO_PIN_3
 #define BTN_MINS GPIO_PIN_5
 #define BTN_ALARMOFF GPIO_PIN_7
-#define BTN_TIMESET GPIO_PIN_0
+#define BTN_ALARMSET GPIO_PIN_0
 #define BTN_24HR GPIO_PIN_2
 #define BTN_WHATEVER GPIO_PIN_4
 #define BTN_SNOOZE GPIO_PIN_6
@@ -91,9 +91,15 @@ void increment_hours();
 void increment_mins();
 void increment_secs();
 
-int hours = 2;
+int hours = 0;
 int mins = 41;
 int secs = 0;
+
+int alarm_hour = 0;
+int alarm_min = 0;
+int alarm_set = FALSE;
+
+int use_24hr_time = FALSE;
 
 int main(int argc, char* argv[])
 {
@@ -163,6 +169,20 @@ int main(int argc, char* argv[])
 
   int button_state;
   int last_button_state = OFF; // Flag for edge detection when button is pressed
+  int button_state_hours;
+  int last_button_state_hours = OFF;
+  int button_state_mins;
+  int last_button_state_mins = OFF;
+  int button_state_alarmoff;
+  int last_button_state_alarmoff = OFF;
+  int button_state_alarmset;
+  int last_button_state_alarmset = OFF;
+  int button_state_24hr;
+  int last_button_state_24hr = OFF;
+  int button_state_whatever;
+  int last_button_state_whatever = OFF;
+  int button_state_snooze;
+  int last_button_state_snooze = OFF;
   int debounce_time_elapsed = TRUE; //Whether sufficient time has passed to press the button again
 
   int digits[] = { CC_1, CC_2, CC_3, CC_4, CC_L };
@@ -170,6 +190,38 @@ int main(int argc, char* argv[])
   int digit = 0;
 
   while (TRUE) {
+
+    // Handle button inputs if the debounce time has elapsed
+    debounce_time_elapsed = (__HAL_TIM_GET_FLAG(&s_TimerInstance2, TIM_FLAG_UPDATE) != RESET);
+    if (debounce_time_elapsed) {
+      button_state = HAL_GPIO_ReadPin(GPIOA, BUTTON);
+      button_state_hours = HAL_GPIO_ReadPin(GPIOA, BTN_HOURS);
+      button_state_mins = HAL_GPIO_ReadPin(GPIOA, BTN_MINS);
+      button_state_alarmoff = HAL_GPIO_ReadPin(GPIOA, BTN_ALARMOFF);
+      button_state_alarmset = HAL_GPIO_ReadPin(GPIOA, BTN_ALARMSET);
+      button_state_24hr = HAL_GPIO_ReadPin(GPIOA, BTN_24HR);
+      button_state_whatever = HAL_GPIO_ReadPin(GPIOA, BTN_WHATEVER);
+      button_state_snooze = HAL_GPIO_ReadPin(GPIOA, BTN_SNOOZE);
+
+      if (button_state_hours && !last_button_state_hours) {
+        // TODO: Increment hours
+      }
+      if (button_state_mins && !last_button_state_mins) {
+        // TODO: Increment mins
+      }
+      if (button_state_alarmoff && !last_button_state_alarmoff) {
+        // TODO: Stop alarm if it's running
+      }
+      if (button_state_24hr && !last_button_state_24hr) {
+        // TODO: Toggle time mode
+      }
+      if (button_state_whatever && !last_button_state_whatever) {
+
+      }
+      if (button_state_snooze && !last_button_state_snooze) {
+        // TODO: If alarm is running, stop it and set another one 5 mins from now
+      }
+    }
 
     // Limits frequency for updating the 7-segment display
     if (__HAL_TIM_GET_FLAG(&s_TimerInstance1, TIM_FLAG_UPDATE) != RESET) {
@@ -183,7 +235,6 @@ int main(int argc, char* argv[])
         }
       }
       write_digit(digits[digit]);
-
       if (digit == num_digits-1) {
         digit = 0;
       } else {
@@ -191,22 +242,24 @@ int main(int argc, char* argv[])
       }
     }
 
-    button_state = HAL_GPIO_ReadPin(GPIOA, BUTTON);
-
-    // Flag is set when the debounce timer reaches its period
-    debounce_time_elapsed = (__HAL_TIM_GET_FLAG(&s_TimerInstance2, TIM_FLAG_UPDATE) != RESET);
+    // Flag is set when a minute is reached (increment the clock)
+    if (__HAL_TIM_GET_FLAG(&s_TimerInstance3, TIM_FLAG_UPDATE) != RESET) {
+      increment_secs();
+      __HAL_TIM_CLEAR_FLAG(&s_TimerInstance3, TIM_IT_UPDATE);
+    }
 
     if (button_state && !last_button_state && debounce_time_elapsed) {
       //increment_mins();
       __HAL_TIM_CLEAR_FLAG(&s_TimerInstance2, TIM_IT_UPDATE);
     }
     last_button_state = button_state;
-
-    // Flag is set when a minute is reached (increment the clock)
-    if (__HAL_TIM_GET_FLAG(&s_TimerInstance3, TIM_FLAG_UPDATE) != RESET) {
-      increment_secs();
-      __HAL_TIM_CLEAR_FLAG(&s_TimerInstance3, TIM_IT_UPDATE);
-    }
+    last_button_state_hours = button_state_hours;
+    last_button_state_mins = button_state_mins;
+    last_button_state_alarmoff = button_state_alarmoff;
+    last_button_state_alarmset = button_state_alarmset;
+    last_button_state_24hr = button_state_24hr;
+    last_button_state_whatever = button_state_whatever;
+    last_button_state_snooze = button_state_snooze;
 
   }
 }
@@ -224,7 +277,8 @@ void init_output_pins(GPIO_InitTypeDef GPIO_Init)
 
 void init_input_pins(GPIO_InitTypeDef GPIO_Init)
 {
-  GPIO_Init.Pin = BUTTON;
+  GPIO_Init.Pin = BUTTON | BTN_HOURS | BTN_MINS | BTN_ALARMOFF | BTN_ALARMSET | BTN_24HR |
+      BTN_WHATEVER | BTN_SNOOZE;
   GPIO_Init.Speed = GPIO_SPEED_MEDIUM;
   GPIO_Init.Mode = GPIO_MODE_INPUT;
   GPIO_Init.Pull = GPIO_PULLDOWN;
@@ -238,10 +292,20 @@ void init_input_pins(GPIO_InitTypeDef GPIO_Init)
  */
 void write_digit(int digit)
 {
+  int hour_to_display;
+  if (use_24hr_time)
+    hour_to_display = hours;
+  else if (hours == 0)
+    hour_to_display = 12;
+  else if (hours > 12)
+    hour_to_display = hours - 12;
+  else
+    hour_to_display = hours;
+
   if (digit == CC_1) {
-    write_digit_value(digit_values[hours / 10]);
+    write_digit_value(digit_values[hour_to_display / 10]);
   } else if (digit == CC_2) {
-    write_digit_value(digit_values[hours % 10]);
+    write_digit_value(digit_values[hour_to_display % 10]);
   } else if (digit == CC_3) {
     write_digit_value(digit_values[mins / 10]);
   } else if (digit == CC_4) {
@@ -269,8 +333,8 @@ void write_digit_value(int value)
 void increment_hours()
 {
   hours++;
-  if (hours > 12) {
-    hours = 1;
+  if (hours > 23) {
+    hours = 0;
   }
 }
 
